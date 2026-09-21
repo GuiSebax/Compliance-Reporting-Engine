@@ -1,0 +1,26 @@
+# --- Python / backend ---
+backend/.venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/*.egg-info/
+backend/report_exports/
+backend/_alembic_gen.db
+backend/.env
+
+# --- Node / frontend ---
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/next-env.d.ts
+
+# --- Docker / local data ---
+tmp/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
