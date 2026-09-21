@@ -18,18 +18,43 @@ services:
       timeout: 5s
       retries: 10
 
-  # LocalStack stands in for AWS S3 so the whole stack runs with zero
-  # cloud credentials. See README "AWS / S3 export" for how to point
-  # the api service at a real AWS bucket instead.
+  # MongoDB holds the schema-flexible, retention-bound forensic trail of
+  # rejected ingestion rows (raw payloads). Everything relational and
+  # audit-critical stays in Postgres — see README "Technical decisions".
+  mongo:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: compliance
+      MONGO_INITDB_ROOT_PASSWORD: compliance
+    ports:
+      # Host port 27018 (not 27017) for the same reason as Postgres above.
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # LocalStack stands in for AWS (S3, Lambda, EventBridge) so the whole
+  # stack runs with zero cloud credentials. See README "AWS / S3 export"
+  # and "Scheduled reports (AWS Lambda)" for the real-AWS equivalents.
   localstack:
     image: localstack/localstack:3.8
     environment:
-      SERVICES: s3
+      SERVICES: s3,lambda,events
       DEFAULT_REGION: us-east-1
+      # Lambda runs each function in its own container, started through
+      # the host Docker daemon (socket mounted below). Attaching those
+      # containers to this compose network lets the function reach
+      # `db` and `localstack` by name.
+      LAMBDA_DOCKER_NETWORK: compliance-net
     ports:
       - "4566:4566"
     volumes:
       - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
       interval: 5s
@@ -51,6 +76,8 @@ services:
       S3_ENDPOINT_URL: http://localstack:4566
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
+      MONGO_URL: mongodb://compliance:compliance@mongo:27017/?authSource=admin
+      MONGO_DB_NAME: compliance
       REPORTS_LOCAL_DIR: /app/report_exports
       LOG_LEVEL: INFO
     ports:
@@ -60,8 +87,48 @@ services:
         condition: service_healthy
       localstack:
         condition: service_healthy
+      mongo:
+        condition: service_healthy
     volumes:
       - report_exports:/app/report_exports
+
+  # --- Scheduled report Lambda (opt-in: `docker compose --profile lambda up`) ---
+  #
+  # One-shot: builds the Lambda .zip (inside the official Lambda base image,
+  # so compiled wheels match the runtime), uploads it to LocalStack S3, and
+  # registers the function + EventBridge schedule — using the same script
+  # you would point at a real AWS account.
+  # Override the schedule to watch it fire, e.g.:
+  #   REPORT_SCHEDULE="rate(1 minute)" docker compose --profile lambda up
+  lambda-provisioner:
+    profiles: ["lambda"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.lambda
+      target: provisioner
+    command:
+      - --artifact-bucket=lambda-artifacts
+      - --ensure-bucket=lambda-artifacts
+      - --ensure-bucket=compliance-reports
+      - --role-arn=arn:aws:iam::000000000000:role/compliance-report-lambda
+      - --schedule-expression=${REPORT_SCHEDULE:-cron(0 3 1 * ? *)}
+      - --env=DATABASE_URL=postgresql+psycopg://compliance:compliance@db:5432/compliance
+      - --env=S3_BUCKET_NAME=compliance-reports
+      - --env=S3_REGION=us-east-1
+      - --env=S3_ENDPOINT_URL=http://localstack:4566
+      - --env=LOG_LEVEL=INFO
+    environment:
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    depends_on:
+      localstack:
+        condition: service_healthy
+      api:
+        # healthy => migrations already applied (entrypoint runs alembic first)
+        condition: service_healthy
+    restart: "no"
 
   frontend:
     build:
@@ -79,5 +146,12 @@ services:
 
 volumes:
   db_data:
+  mongo_data:
   localstack_data:
   report_exports:
+
+networks:
+  default:
+    # Fixed name so LocalStack can attach Lambda containers to it
+    # (LAMBDA_DOCKER_NETWORK above).
+    name: compliance-net
