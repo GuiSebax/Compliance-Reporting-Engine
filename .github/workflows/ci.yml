@@ -28,6 +28,20 @@ jobs:
   test:
     name: Test (pytest)
     runs-on: ubuntu-latest
+    services:
+      # Real MongoDB for tests/integration/test_mongo_real.py (mongomock does
+      # not enforce BSON encoding rules). Everything else runs without it.
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval db.hello().ok"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MONGO_TEST_URL: mongodb://localhost:27017
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,6 +66,34 @@ jobs:
           context: backend
           push: false
           tags: compliance-reporting-engine-api:ci
+
+  docker-build-lambda:
+    name: Build Lambda package (zip)
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Builds inside the official Lambda base image and smoke-imports the
+      # handler from the pruned package, so a broken deployment package
+      # fails CI instead of a scheduled run.
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.lambda
+          target: artifact
+          outputs: type=local,dest=dist
+          push: false
+      - name: Check package size against the Lambda limit
+        run: |
+          python - <<'EOF'
+          import os, zipfile
+          z = zipfile.ZipFile("dist/report-lambda.zip")
+          unzipped = sum(i.file_size for i in z.infolist()) / 1e6
+          print(f"zip={os.path.getsize('dist/report-lambda.zip')/1e6:.1f} MB, unzipped={unzipped:.1f} MB")
+          assert unzipped < 250, "exceeds Lambda's 250 MB unzipped limit"
+          EOF
+        working-directory: .
 
   frontend:
     name: Frontend (lint + typecheck + build)
