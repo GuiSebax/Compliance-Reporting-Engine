@@ -5,9 +5,11 @@ backend/__pycache__/
 *.pyc
 backend/.pytest_cache/
 backend/.ruff_cache/
+backend/.coverage
 backend/*.egg-info/
 backend/report_exports/
 backend/_alembic_gen.db
+backend/dist/
 backend/.env
 
 # --- Node / frontend ---

@@ -8,3 +8,4 @@ report_exports
 sample_data
 _alembic_gen.db
 .env
+dist

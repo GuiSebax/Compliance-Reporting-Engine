@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -79,6 +79,29 @@ class ReportRepository:
         report_run.finished_at = datetime.utcnow()
         self._session.flush()
         return report_run
+
+    def find_completed(
+        self,
+        *,
+        period_start: date,
+        period_end: date,
+        rule_set_version: str,
+        triggered_by_user_id: str,
+    ) -> ReportRun | None:
+        """Latest COMPLETED run for exactly this period/rule set/trigger, if any."""
+        stmt = (
+            select(ReportRun)
+            .where(
+                ReportRun.period_start == period_start,
+                ReportRun.period_end == period_end,
+                ReportRun.rule_set_version == rule_set_version,
+                ReportRun.triggered_by_user_id == triggered_by_user_id,
+                ReportRun.status == ReportRunStatus.COMPLETED,
+            )
+            .order_by(ReportRun.created_at.desc())
+            .limit(1)
+        )
+        return self._session.scalar(stmt)
 
     def get_by_id(self, report_run_id: str) -> ReportRun | None:
         stmt = (

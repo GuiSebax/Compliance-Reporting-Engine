@@ -1,0 +1,71 @@
+# Builds the scheduled-report Lambda deployment package (a .zip), and the
+# one-shot provisioner image used by docker-compose.
+#
+# Why a .zip built *inside the official Lambda base image*: pandas, numpy,
+# psycopg and pydantic-core ship compiled wheels, and they must be the
+# Linux/CPython 3.12 ones the Lambda runtime will actually load — building on
+# a Windows/macOS host would produce the wrong binaries. Running pip inside
+# the same image AWS runs the function in guarantees they match.
+#
+# Why a zip and not a container image: LocalStack Community cannot execute
+# container-image Lambdas (a Pro feature), and the zip fits comfortably under
+# Lambda's 250 MB unzipped limit (~170 MB after pruning). If the dependency
+# set ever outgrows that limit, switching this stage's output to an image
+# (FROM public.ecr.aws/lambda/python:3.12 + CMD [handler]) is the escape hatch.
+#
+# Targets:
+#   artifact     -> just the zip.  docker build -f Dockerfile.lambda \
+#                       --target artifact --output type=local,dest=dist .
+#   provisioner  -> python + boto3 + the zip + scripts/provision_lambda.py
+
+# --- Build the package -------------------------------------------------------
+FROM public.ecr.aws/lambda/python:3.12 AS build
+
+COPY pyproject.toml /src/pyproject.toml
+COPY app /src/app
+RUN pip install --no-cache-dir --target /pkg /src
+
+# Prune what the function cannot need, to stay well under the size limit:
+#  * boto3/botocore/s3transfer/jmespath — already provided by the Lambda
+#    runtime (a bundled copy would only add ~30 MB and pin an old version);
+#  * the web stack (fastapi/starlette/uvicorn/...) — the handler is not a
+#    web app; it never imports them (guarded by the smoke test below).
+RUN python - <<'EOF'
+import pathlib, shutil
+
+PRUNE = (
+    "boto3", "botocore", "s3transfer", "jmespath",
+    "fastapi", "starlette", "uvicorn", "uvloop", "httptools", "watchfiles", "websockets",
+    "yaml", "_yaml", "pyyaml", "pip", "setuptools", "pkg_resources",
+)
+pkg = pathlib.Path("/pkg")
+for entry in pkg.iterdir():
+    # matches the package dir and its *.dist-info, case-insensitively
+    if entry.name.lower().split("-")[0].split(".")[0] in PRUNE:
+        shutil.rmtree(entry, ignore_errors=True) if entry.is_dir() else entry.unlink()
+for cache in pkg.rglob("__pycache__"):
+    shutil.rmtree(cache, ignore_errors=True)
+for test_dir in pkg.glob("pandas/tests"):
+    shutil.rmtree(test_dir, ignore_errors=True)
+EOF
+
+# Smoke test: the pruned package must still import the handler. If pruning
+# ever removes something the function needs, the build fails here — not at
+# 03:00 UTC on the 1st of the month.
+RUN PYTHONPATH=/pkg python -c "import app.lambda_handlers.scheduled_report as h; assert callable(h.handler)"
+
+# Zip with the stdlib (the base image has no `zip` binary).
+RUN python -c "import shutil; shutil.make_archive('/report-lambda', 'zip', '/pkg')" \
+    && ls -l /report-lambda.zip
+
+# --- Just the artifact (for `docker build --output`) -------------------------
+FROM scratch AS artifact
+COPY --from=build /report-lambda.zip /report-lambda.zip
+
+# --- One-shot provisioner for docker-compose ---------------------------------
+FROM python:3.12-slim AS provisioner
+RUN pip install --no-cache-dir "boto3>=1.35,<2.0"
+WORKDIR /provision
+COPY scripts/provision_lambda.py ./provision_lambda.py
+COPY --from=build /report-lambda.zip ./report-lambda.zip
+ENTRYPOINT ["python", "provision_lambda.py", "--zip-path=report-lambda.zip"]

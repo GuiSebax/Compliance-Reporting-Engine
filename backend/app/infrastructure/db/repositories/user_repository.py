@@ -17,8 +17,8 @@ class UserRepository:
     def get_by_id(self, user_id: str) -> User | None:
         return self._session.get(User, user_id)
 
-    def create(self, *, email: str, hashed_password: str) -> User:
-        user = User(email=email.lower(), hashed_password=hashed_password)
+    def create(self, *, email: str, hashed_password: str, is_active: bool = True) -> User:
+        user = User(email=email.lower(), hashed_password=hashed_password, is_active=is_active)
         self._session.add(user)
         self._session.flush()
         return user
