@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_current_user
+from app.application.report_service import generate_report
+from app.domain.exceptions import UnknownRuleSetVersionError
+from app.infrastructure.db.models import ReportRun, User
+from app.infrastructure.db.repositories.report_repository import ReportRepository
+from app.infrastructure.db.session import get_db
+from app.infrastructure.logging import get_logger
+from app.schemas.reports import (
+    AuditLogEntryResponse,
+    ReportDetailResponse,
+    ReportLineItemResponse,
+    ReportSummaryResponse,
+    ReportTriggerRequest,
+    ViolationResponse,
+)
+
+router = APIRouter(prefix="/reports", tags=["reports"])
+logger = get_logger(__name__)
+
+
+def _to_detail_response(report_run: ReportRun) -> ReportDetailResponse:
+    return ReportDetailResponse(
+        id=report_run.id,
+        period_start=report_run.period_start,
+        period_end=report_run.period_end,
+        status=report_run.status,
+        rule_set_version=report_run.rule_set_version,
+        rule_set_definition_hash=report_run.rule_set_definition_hash,
+        input_transaction_count=report_run.input_transaction_count,
+        input_data_hash=report_run.input_data_hash,
+        started_at=report_run.started_at,
+        finished_at=report_run.finished_at,
+        created_at=report_run.created_at,
+        line_items=[ReportLineItemResponse.model_validate(li) for li in report_run.line_items],
+        violations=[ViolationResponse(**v) for v in (report_run.violations or [])],
+        audit_trail=[AuditLogEntryResponse.model_validate(a) for a in report_run.audit_entries],
+        export_json_available=bool(report_run.export_json_path),
+        export_csv_available=bool(report_run.export_csv_path),
+        export_pdf_available=bool(report_run.export_pdf_path),
+    )
+
+
+@router.post("", response_model=ReportDetailResponse, status_code=status.HTTP_201_CREATED)
+def trigger_report(
+    payload: ReportTriggerRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ReportDetailResponse:
+    try:
+        report_run = generate_report(
+            db=db,
+            period_start=payload.period_start,
+            period_end=payload.period_end,
+            rule_set_version=payload.rule_set_version,
+            triggered_by_user_id=current_user.id,
+        )
+    except UnknownRuleSetVersionError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.error("report_trigger_failed", error=str(exc))
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "Report generation failed."
+        ) from exc
+
+    full_run = ReportRepository(db).get_by_id(report_run.id)
+    return _to_detail_response(full_run)
+
+
+@router.get("", response_model=list[ReportSummaryResponse])
+def list_reports(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[ReportSummaryResponse]:
+    runs = ReportRepository(db).list_recent(limit=limit, offset=offset)
+    return [ReportSummaryResponse.model_validate(r) for r in runs]
+
+
+@router.get("/{report_id}", response_model=ReportDetailResponse)
+def get_report(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ReportDetailResponse:
+    report_run = ReportRepository(db).get_by_id(report_id)
+    if report_run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found.")
+    return _to_detail_response(report_run)
+
+
+_EXPORT_PATH_ATTR = {
+    "json": ("export_json_path", "application/json"),
+    "csv": ("export_csv_path", "text/csv"),
+    "pdf": ("export_pdf_path", "application/pdf"),
+}
+
+
+@router.get("/{report_id}/export")
+def export_report(
+    report_id: str,
+    format: Literal["json", "csv", "pdf"] = "json",
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    report_run = ReportRepository(db).get_by_id(report_id)
+    if report_run is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not found.")
+
+    attr, media_type = _EXPORT_PATH_ATTR[format]
+    path_str = getattr(report_run, attr)
+    if not path_str or not Path(path_str).exists():
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"No {format} export available for this report."
+        )
+
+    return FileResponse(path_str, media_type=media_type, filename=f"report-{report_id}.{format}")

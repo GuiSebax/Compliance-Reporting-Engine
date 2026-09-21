@@ -1,0 +1,188 @@
+{
+  "transactions": [
+    {
+      "external_id": "SYN-0000000",
+      "timestamp": "2026-01-08T07:45:07+00:00",
+      "amount": "16273.71",
+      "currency": "USD",
+      "counterparty": "Gould-Foster",
+      "raw_category_hint": "wire"
+    },
+    {
+      "external_id": "SYN-0000001",
+      "timestamp": "2026-01-27T00:20:52+00:00",
+      "amount": "13802.00",
+      "currency": "USD"
+    },
+    {
+      "external_id": "SYN-0000002",
+      "timestamp": "2026-01-11T10:08:29+00:00",
+      "amount": "2149.59",
+      "currency": "USD",
+      "counterparty": "Jones PLC"
+    },
+    {
+      "external_id": "SYN-0000003",
+      "timestamp": "2026-01-12T16:23:33+00:00",
+      "amount": "13776.63",
+      "currency": "USD",
+      "counterparty": "Diaz Inc"
+    },
+    {
+      "external_id": "SYN-0000004",
+      "timestamp": "2026-01-28T10:48:04+00:00",
+      "amount": "3154.98",
+      "currency": "12A",
+      "counterparty": "Lewis, Miller and Barnes"
+    },
+    {
+      "external_id": "SYN-0000005",
+      "timestamp": "2026-01-29T00:22:25+00:00",
+      "amount": "9917.62",
+      "currency": "USD",
+      "counterparty": "Davis Group",
+      "raw_category_hint": "internal_transfer"
+    },
+    {
+      "external_id": "SYN-0000006",
+      "timestamp": "2026-01-03T06:16:21+00:00",
+      "amount": "21461.85",
+      "currency": "USD",
+      "counterparty": "Serrano Inc",
+      "raw_category_hint": "internal_transfer"
+    },
+    {
+      "external_id": "SYN-0000007",
+      "timestamp": "2026-01-08T00:04:09+00:00",
+      "amount": "2945.69",
+      "currency": "USD",
+      "counterparty": "Mccoy PLC",
+      "raw_category_hint": "internal_transfer"
+    },
+    {
+      "external_id": "SYN-0000008",
+      "timestamp": "2026-01-09T18:33:41+00:00",
+      "amount": "14540.42",
+      "currency": "USD",
+      "counterparty": "Ray Group"
+    },
+    {
+      "external_id": "SYN-0000009",
+      "timestamp": "2026-01-19T01:52:28+00:00",
+      "amount": "13694.06",
+      "currency": "USD",
+      "counterparty": "Cherry Inc"
+    },
+    {
+      "external_id": "SYN-0000010",
+      "timestamp": "2026-01-03T21:26:25+00:00",
+      "amount": "54591.00",
+      "currency": "USD"
+    },
+    {
+      "external_id": "SYN-0000011",
+      "timestamp": "2026-01-16T06:00:28+00:00",
+      "amount": "14639.46",
+      "currency": "USD",
+      "counterparty": "Garrison, Roberts and Thomas",
+      "raw_category_hint": "wire"
+    },
+    {
+      "external_id": "SYN-0000012",
+      "timestamp": "2026-01-15T13:15:13+00:00",
+      "amount": "19859.69",
+      "currency": "USD",
+      "counterparty": "Duncan PLC"
+    },
+    {
+      "external_id": "SYN-0000013",
+      "timestamp": "2026-01-12T20:23:34+00:00",
+      "amount": "14361.02",
+      "currency": "USD",
+      "counterparty": "White, Perkins and Fowler"
+    },
+    {
+      "external_id": "SYN-0000014",
+      "timestamp": "2026-01-17T16:10:41+00:00",
+      "amount": "11221.41",
+      "currency": "USD",
+      "counterparty": "Davis-Joseph",
+      "raw_category_hint": "fee"
+    },
+    {
+      "external_id": "SYN-0000015",
+      "timestamp": "2026-01-04T13:17:06+00:00",
+      "amount": "12798.81",
+      "currency": "USD",
+      "counterparty": "Brown, Harris and Becker"
+    },
+    {
+      "external_id": "SYN-0000016",
+      "timestamp": "2026-01-17T14:31:26+00:00",
+      "amount": "23331.82",
+      "currency": "USD",
+      "counterparty": "Waters-Owens"
+    },
+    {
+      "external_id": "SYN-0000017",
+      "timestamp": "2026-01-04T18:26:03+00:00",
+      "amount": "13952.34",
+      "currency": "USD",
+      "counterparty": "Ward-Wright",
+      "raw_category_hint": "refund"
+    },
+    {
+      "external_id": "SYN-0000018",
+      "timestamp": "2026-01-16T05:32:32+00:00",
+      "amount": "17382.69",
+      "currency": "USD",
+      "counterparty": "Hale and Sons"
+    },
+    {
+      "external_id": "SYN-0000019",
+      "timestamp": "2026-01-29T03:37:36+00:00",
+      "amount": "11405.68",
+      "currency": "USD",
+      "counterparty": "Andrews PLC",
+      "raw_category_hint": "refund"
+    },
+    {
+      "external_id": "SYN-0000020",
+      "timestamp": "2026-01-14T02:30:07+00:00",
+      "amount": "17426.35",
+      "currency": "USD",
+      "counterparty": "Golden-Blair",
+      "raw_category_hint": "wire"
+    },
+    {
+      "external_id": "SYN-0000021",
+      "timestamp": "2026-01-16T00:43:07+00:00",
+      "amount": "3407.78",
+      "currency": "usd",
+      "counterparty": "Lynch-Jones"
+    },
+    {
+      "external_id": "SYN-0000022",
+      "timestamp": "2026-01-19T17:28:46+00:00",
+      "amount": "8675.78",
+      "currency": "USD",
+      "counterparty": "Barnes, Sherman and Hernandez",
+      "raw_category_hint": "fee"
+    },
+    {
+      "external_id": "SYN-0000023",
+      "timestamp": "2026-01-18T06:08:44+00:00",
+      "amount": "15273.38",
+      "currency": "USD",
+      "counterparty": "Fisher-Hayden"
+    },
+    {
+      "external_id": "SYN-0000024",
+      "timestamp": "2026-01-11T14:13:49+00:00",
+      "amount": "7186.51",
+      "currency": "USD",
+      "counterparty": "Duran PLC",
+      "raw_category_hint": "refund"
+    }
+  ]
+}
