@@ -75,3 +75,23 @@ def upload_file(*, local_path: str, key: str) -> str | None:
     except (ClientError, BotoCoreError, OSError) as exc:
         logger.warning("s3_upload_failed", bucket=settings.s3_bucket_name, key=key, error=str(exc))
         return None
+
+
+def download_object(*, key: str) -> bytes | None:
+    """Fetch an object's bytes, or ``None`` if it cannot be retrieved.
+
+    Used to serve exports of reports generated where the local disk is not
+    shared with the API (the scheduled Lambda writes to its own ephemeral
+    ``/tmp``; S3 is the only copy that outlives it). Exports are bounded
+    (one report), so reading into memory is fine.
+    """
+    settings = get_settings()
+    client = _client()
+    try:
+        response = client.get_object(Bucket=settings.s3_bucket_name, Key=key)
+        return response["Body"].read()
+    except (ClientError, BotoCoreError) as exc:
+        logger.warning(
+            "s3_download_failed", bucket=settings.s3_bucket_name, key=key, error=str(exc)
+        )
+        return None
