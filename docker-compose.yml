@@ -1,0 +1,83 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: compliance
+      POSTGRES_DB: compliance
+    ports:
+      # Host port 5433 (not 5432) — avoids clashing with a Postgres
+      # instance already running on the host. Containers still talk to
+      # each other over the internal default, db:5432.
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # LocalStack stands in for AWS S3 so the whole stack runs with zero
+  # cloud credentials. See README "AWS / S3 export" for how to point
+  # the api service at a real AWS bucket instead.
+  localstack:
+    image: localstack/localstack:3.8
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+psycopg://compliance:compliance@db:5432/compliance
+      JWT_SECRET_KEY: local-dev-secret-change-me
+      JWT_ALGORITHM: HS256
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      S3_BUCKET_NAME: compliance-reports
+      S3_REGION: us-east-1
+      S3_ENDPOINT_URL: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      REPORTS_LOCAL_DIR: /app/report_exports
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    volumes:
+      - report_exports:/app/report_exports
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle at build time — the browser (not the
+        # frontend container) calls this URL, so it must be reachable from
+        # the host, i.e. api's published port, not the internal service name.
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  db_data:
+  localstack_data:
+  report_exports:
