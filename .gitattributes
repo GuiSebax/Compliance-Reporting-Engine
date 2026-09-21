@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings even when checked out on Windows
+# (autocrlf=true) — a CRLF shebang line breaks `#!/bin/sh` inside the
+# Linux container that builds/runs backend/docker/entrypoint.sh.
+*.sh text eol=lf
