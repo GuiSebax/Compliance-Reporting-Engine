@@ -14,6 +14,7 @@ from app.api.v1 import api_router
 from app.core.config import get_settings
 from app.domain.exceptions import DomainError
 from app.infrastructure.logging import configure_logging, get_logger
+from app.infrastructure.mongo.client import ensure_mongo_indexes
 from app.infrastructure.storage import s3_client
 
 configure_logging()
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
         # Only auto-provision the bucket for a local/demo endpoint
         # (LocalStack); a real AWS bucket is provisioned out-of-band.
         s3_client.ensure_bucket_exists()
+    ensure_mongo_indexes()
     logger.info("application_startup", environment=settings.environment)
     yield
     logger.info("application_shutdown")

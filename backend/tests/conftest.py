@@ -23,6 +23,7 @@ os.environ.setdefault(
     "REPORTS_LOCAL_DIR", tempfile.mkdtemp(prefix="compliance_reporting_test_exports_")
 )
 
+import mongomock  # noqa: E402
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
@@ -33,6 +34,8 @@ from app.infrastructure.db import models  # noqa: E402,F401 register tables on B
 from app.infrastructure.db.base import Base  # noqa: E402
 from app.infrastructure.db.repositories.user_repository import UserRepository  # noqa: E402
 from app.infrastructure.db.session import get_db  # noqa: E402
+from app.infrastructure.mongo.client import get_rejection_store  # noqa: E402
+from app.infrastructure.mongo.rejection_store import MongoRejectionStore  # noqa: E402
 from app.infrastructure.security.passwords import hash_password  # noqa: E402
 from app.main import app  # noqa: E402
 
@@ -99,3 +102,22 @@ def auth_headers(client, test_user):
     assert response.status_code == 200, response.text
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def mongo_collection():
+    """In-memory MongoDB double (mongomock) — same pymongo API, no server."""
+    return mongomock.MongoClient(tz_aware=True)["compliance_test"]["ingestion_rejections"]
+
+
+@pytest.fixture()
+def rejection_store(client, mongo_collection):
+    """A real ``MongoRejectionStore`` over mongomock, wired into the API.
+
+    Depends on ``client`` so its teardown (which clears dependency
+    overrides) runs after this fixture's override is registered.
+    """
+    store = MongoRejectionStore(mongo_collection, ttl_days=90)
+    store.ensure_indexes()
+    app.dependency_overrides[get_rejection_store] = lambda: store
+    return store

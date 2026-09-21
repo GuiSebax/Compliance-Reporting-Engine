@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -65,6 +66,36 @@ class TransactionRowSchema(BaseModel):
 class RejectedRow(BaseModel):
     row_index: int
     reason: str
+
+
+class ValidationErrorDetail(BaseModel):
+    loc: str
+    type: str
+    msg: str
+
+
+class RejectedRowDetail(BaseModel):
+    """A rejected row as kept in the forensic trail (MongoDB): unlike
+    ``RejectedRow`` it carries the original raw payload, whose shape is
+    whatever the source file contained."""
+
+    id: str
+    batch_id: str
+    row_index: int
+    reason: str
+    errors: list[ValidationErrorDetail] = Field(default_factory=list)
+    raw_payload: Any
+    source_filename: str
+    source_format: str
+    rejected_at: datetime
+
+
+class RejectedRowDetailPage(BaseModel):
+    batch_id: str
+    total: int
+    limit: int
+    offset: int
+    items: list[RejectedRowDetail]
 
 
 class BatchResponse(BaseModel):

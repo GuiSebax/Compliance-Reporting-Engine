@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
 
+    # --- MongoDB (forensic trail of rejected ingestion rows) ---
+    # ``None`` disables the feature entirely (a no-op store is used), so the
+    # API and the test suite run without a Mongo instance.
+    mongo_url: str | None = None
+    mongo_db_name: str = "compliance"
+    # Kept short on purpose: Mongo is best-effort, so an outage must not
+    # stall an upload for the driver's 30s default.
+    mongo_server_selection_timeout_ms: int = 2000
+    # Rejected raw payloads may hold sensitive financial data; they expire.
+    mongo_rejection_ttl_days: int = 90
+
     # --- Local export fallback (always written, S3 upload is best-effort) ---
     reports_local_dir: str = "./report_exports"
 

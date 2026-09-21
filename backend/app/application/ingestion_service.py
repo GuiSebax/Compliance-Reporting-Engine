@@ -22,13 +22,14 @@ import csv
 import hashlib
 import io
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC
 from decimal import Decimal
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.application.rejection_store import RejectionDetail
 from app.core.config import get_settings
 from app.infrastructure.db.models import Batch, TransactionRecord
 from app.infrastructure.db.repositories.batch_repository import BatchRepository
@@ -56,6 +57,10 @@ class IngestionResult:
     accepted_row_count: int
     rejected_row_count: int
     rejected_rows: list[RejectedRow]
+    # Raw payload + structured errors for each rejected row, for the
+    # forensic trail (see ``app.application.rejection_store``). Not part
+    # of the API response; the caller records it after committing.
+    rejection_details: list[RejectionDetail] = field(default_factory=list)
 
 
 _ALLOWED_EXTENSIONS = (".csv", ".json")
@@ -85,6 +90,25 @@ def _sniff_rows(filename: str, raw_bytes: bytes) -> list[dict]:
     raise UnsupportedFileTypeError(
         f"Unsupported file type for '{filename}'. Allowed: {', '.join(_ALLOWED_EXTENSIONS)}"
     )
+
+
+def _structured_errors(exc: ValueError) -> tuple[dict[str, str], ...]:
+    """Reduce a validation failure to plain ``loc``/``type``/``msg`` strings.
+
+    Pydantic's own ``errors()`` also carries the offending ``input`` and
+    ``ctx`` (which can hold exception objects) — neither is JSON/BSON
+    safe, and the input is already kept separately as the raw payload.
+    """
+    if isinstance(exc, ValidationError):
+        return tuple(
+            {
+                "loc": ".".join(str(part) for part in err["loc"]),
+                "type": err["type"],
+                "msg": err["msg"],
+            }
+            for err in exc.errors()
+        )
+    return ({"loc": "", "type": "value_error", "msg": str(exc)},)
 
 
 def ingest_batch(
@@ -130,6 +154,7 @@ def ingest_batch(
 
     accepted_records: list[TransactionRecord] = []
     rejected_rows: list[RejectedRow] = []
+    rejection_details: list[RejectionDetail] = []
 
     for index, raw_row in enumerate(raw_rows):
         try:
@@ -137,7 +162,16 @@ def ingest_batch(
                 raise ValueError("row is not a JSON object / CSV record")
             row = TransactionRowSchema.model_validate(raw_row)
         except (ValidationError, ValueError) as exc:
-            rejected_rows.append(RejectedRow(row_index=index, reason=str(exc)))
+            reason = str(exc)
+            rejected_rows.append(RejectedRow(row_index=index, reason=reason))
+            rejection_details.append(
+                RejectionDetail(
+                    row_index=index,
+                    reason=reason,
+                    raw_payload=raw_row,
+                    errors=_structured_errors(exc),
+                )
+            )
             continue
 
         timestamp = row.timestamp if row.timestamp.tzinfo else row.timestamp.replace(tzinfo=UTC)
@@ -178,4 +212,5 @@ def ingest_batch(
         accepted_row_count=len(accepted_records),
         rejected_row_count=len(rejected_rows),
         rejected_rows=rejected_rows,
+        rejection_details=rejection_details,
     )
